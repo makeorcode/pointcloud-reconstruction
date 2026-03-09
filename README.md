@@ -178,10 +178,20 @@ The pipeline prints four stages of progress:
 First-person OpenGL viewer for `.pcd` or `.npz` point cloud files.
 
 ```
-python flythrough.py <pointcloud_file>
+python flythrough.py <file1.pcd> [file2.pcd ...]
 ```
 
-**Controls**
+Pass a single file for normal viewing, or multiple files to enter **compare mode** — each cloud is rendered in a distinct colour (blue, orange, green, magenta) and the full stitching / alignment toolset becomes available.
+
+**Example — compare and stitch two scans**
+
+```bash
+python flythrough.py scan_a.pcd scan_b.pcd
+```
+
+---
+
+**Navigation controls**
 
 | Key / Mouse | Action |
 |---|---|
@@ -205,6 +215,44 @@ python flythrough.py <pointcloud_file>
 | F9 / F10 | Rotate scene ±90° around Z |
 | F1 | Reset scene rotation |
 | Esc | Quit |
+
+---
+
+**Compare mode — cloud visibility** *(2+ files)*
+
+| Key | Action |
+|---|---|
+| F2 | Toggle cloud 1 visibility |
+| F3 | Toggle cloud 2 visibility |
+| F4 | Toggle cloud 3 visibility |
+
+---
+
+**Grab mode — interactive alignment** *(2+ files, Tab to enter/exit)*
+
+Grab mode lets you manually position cloud 2 against cloud 1 before running ICP.
+
+| Key / Mouse | Action |
+|---|---|
+| Tab | Toggle grab mode on / off (Esc to cancel and revert) |
+| Left-click drag | Translate cloud 2 in the view plane |
+| Shift + left-click drag | Rotate cloud 2 around its centroid |
+| Scroll | Push / pull cloud 2 along camera forward axis |
+| I | Run ICP to refine alignment (then exits grab mode) |
+
+---
+
+**Pick mode — correspondence-based alignment** *(2+ files)*
+
+Pick at least 3 matching point pairs from each cloud. A Kabsch SVD initial transform is computed from the picks, then refined with ICP.
+
+| Key / Mouse | Action |
+|---|---|
+| T | Toggle pick mode on / off |
+| Left-click | Pick nearest point (alternates between cloud 1 and cloud 2) |
+| U | Undo last pick |
+| G | Compute alignment from current pairs (needs 3+) |
+| M | Merge all clouds and save (prompts for filename) |
 
 ---
 

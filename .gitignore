@@ -1,0 +1,20 @@
+# ROS bags
+*.bag
+*.mcap
+*.mcap.zstd
+*.db3
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Output files
+*.npz
+*.pcd
+
+# OS
+.DS_Store
+Thumbs.db

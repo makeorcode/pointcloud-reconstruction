@@ -1,0 +1,8 @@
+numpy
+mcap
+mcap-ros2-support
+zstandard
+open3d
+glfw
+PyOpenGL
+PyOpenGL_accelerate

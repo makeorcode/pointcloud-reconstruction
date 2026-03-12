@@ -1,5 +1,7 @@
 # StaticScan
 
+https://github.com/user-attachments/assets/401fc6c8-332f-4903-893c-5cb5063d45b4
+
 Offline point cloud reconstruction pipeline for a rotating-platform LiDAR (Velodyne VLP-16) using ROS 2 MCAP bag files. No ROS installation required.
 
 The pipeline has three stages:
@@ -11,6 +13,8 @@ The pipeline has three stages:
 | `flythrough.py` | First-person OpenGL viewer for the resulting point cloud | — |
 
 ---
+
+
 
 ## Requirements
 

@@ -12,6 +12,17 @@ The pipeline has three stages:
 | `icp_merge.py` | ICP-align angular slices into a single registered map | `.pcd` |
 | `flythrough.py` | First-person OpenGL viewer for the resulting point cloud | — |
 
+### Generic MCAP viewers
+
+These scripts work with **any LiDAR** that publishes `sensor_msgs/PointCloud2` (Unitree L1, Ouster, Livox, etc.):
+
+| Script | Purpose | Output |
+|---|---|---|
+| `mcap_viewer.py` | View raw point cloud frames from any MCAP file | `.pcd` (optional) |
+| `mcap_viewer_tf.py` | TF-aligned viewer with outlier removal and voxel downsampling | `.pcd` (optional) |
+
+See [UNITREE_L1_GUIDE.md](UNITREE_L1_GUIDE.md) for a walkthrough using the Unitree Go2.
+
 ---
 
 
@@ -206,6 +217,7 @@ python flythrough.py scan_a.pcd scan_b.pcd
 | Mid / Right-click drag | Pan |
 | Scroll | Adjust move speed |
 | + / - | Point size |
+| Q | Toggle point shape (circle / square) |
 | C | Cycle color mode |
 | E | Toggle Eye-Dome Lighting (EDL) |
 | L / Shift+L | EDL strength up / down |

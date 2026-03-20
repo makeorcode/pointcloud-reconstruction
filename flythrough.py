@@ -11,6 +11,7 @@ Controls:
     Mid/Right-click - Hold and drag to pan
     Scroll        - Adjust move speed
     +/-           - Point size
+    Q             - Toggle point shape (circle / square)
     C             - Cycle color mode
     E             - Toggle Eye-Dome Lighting (EDL)
     L / Shift+L   - EDL strength up/down
@@ -78,17 +79,21 @@ void main() {
 # Point fragment shader: circular splat with smooth edge
 POINT_FRAG = """
 #version 120
+uniform int u_square_mode;
 varying vec3 v_color;
 varying float v_point_size;
 void main() {
-    // Circular splat: discard outside radius
-    vec2 coord = gl_PointCoord - vec2(0.5);
-    float r2 = dot(coord, coord);
-    if (r2 > 0.25) discard;  // outside unit circle
-
-    // Smooth edge falloff
-    float alpha = 1.0 - smoothstep(0.15, 0.25, r2);
-    gl_FragColor = vec4(v_color, alpha);
+    if (u_square_mode == 0) {
+        // Circular splat: discard outside radius
+        vec2 coord = gl_PointCoord - vec2(0.5);
+        float r2 = dot(coord, coord);
+        if (r2 > 0.25) discard;  // outside unit circle
+        float alpha = 1.0 - smoothstep(0.15, 0.25, r2);
+        gl_FragColor = vec4(v_color, alpha);
+    } else {
+        // Square splat: fill entire point quad
+        gl_FragColor = vec4(v_color, 1.0);
+    }
 }
 """
 
@@ -198,29 +203,50 @@ def _create_fbo(w, h):
     return fbo, color_tex, depth_tex
 
 
+def _turbo_colormap(t):
+    """Attempt at turbo-like perceptual colormap. t in [0,1], returns (N,3) float32."""
+    # 7-stop turbo approximation: dark blue -> cyan -> green -> yellow -> orange -> red -> dark red
+    stops = np.array([
+        [0.18995, 0.07176, 0.23217],  # 0.0  dark indigo
+        [0.11201, 0.38789, 0.72414],  # 0.17 blue
+        [0.07568, 0.69537, 0.64658],  # 0.33 cyan-teal
+        [0.24539, 0.89775, 0.29015],  # 0.50 green
+        [0.73303, 0.93780, 0.12186],  # 0.60 yellow-green
+        [0.98320, 0.65490, 0.03906],  # 0.75 orange
+        [0.84299, 0.18848, 0.15293],  # 0.90 red
+        [0.47960, 0.01583, 0.01055],  # 1.0  dark red
+    ], dtype=np.float32)
+    positions = np.array([0.0, 0.17, 0.33, 0.50, 0.60, 0.75, 0.90, 1.0])
+
+    t = np.clip(t, 0, 1)
+    r = np.interp(t, positions, stops[:, 0])
+    g = np.interp(t, positions, stops[:, 1])
+    b = np.interp(t, positions, stops[:, 2])
+    return np.column_stack([r, g, b]).astype(np.float32)
+
+
 def height_colors(z):
     if z.max() - z.min() < 1e-6:
         return np.ones((len(z), 3), dtype=np.float32) * 0.5
-    z_norm = (z - z.min()) / (z.max() - z.min())
-    colors = np.zeros((len(z), 3), dtype=np.float32)
-    colors[:, 0] = np.clip(4.0 * z_norm - 2.0, 0, 1)
-    colors[:, 1] = np.where(z_norm < 0.5,
-                            np.clip(4.0 * z_norm, 0, 1),
-                            np.clip(4.0 - 4.0 * z_norm, 0, 1))
-    colors[:, 2] = np.clip(2.0 - 4.0 * z_norm, 0, 1)
-    return colors
+    # Use percentiles to ignore outliers that compress the range
+    lo = np.percentile(z, 1)
+    hi = np.percentile(z, 99)
+    if hi - lo < 1e-6:
+        lo, hi = z.min(), z.max()
+    z_norm = np.clip((z - lo) / (hi - lo), 0, 1)
+    return _turbo_colormap(z_norm)
 
 
 def distance_colors(pts):
     dist = np.linalg.norm(pts, axis=1)
     if dist.max() - dist.min() < 1e-6:
         return np.ones((len(pts), 3), dtype=np.float32) * 0.5
-    d_norm = (dist - dist.min()) / (dist.max() - dist.min())
-    colors = np.zeros((len(pts), 3), dtype=np.float32)
-    colors[:, 0] = d_norm
-    colors[:, 1] = 1.0 - np.abs(d_norm - 0.5) * 2
-    colors[:, 2] = 1.0 - d_norm
-    return colors
+    lo = np.percentile(dist, 1)
+    hi = np.percentile(dist, 99)
+    if hi - lo < 1e-6:
+        lo, hi = dist.min(), dist.max()
+    d_norm = np.clip((dist - lo) / (hi - lo), 0, 1)
+    return _turbo_colormap(d_norm)
 
 
 def rot_x(angle):
@@ -325,6 +351,7 @@ class FPSViewer:
         self.move_speed = 0.10
         self.mouse_sensitivity = 0.003
         self.point_size = 0.5
+        self.square_points = False
 
         # Color
         self.color_mode = 0
@@ -420,9 +447,9 @@ class FPSViewer:
                 parts.append(np.tile(color, (len(cloud), 1)))
             self.colors = np.vstack(parts).astype(np.float32)
         elif self.color_names[self.color_mode] == 'height':
-            self.colors = height_colors(self.points[:, 2])  # Z is up
+            self.colors = height_colors(self.original_points[:, 2])  # Z is up, rotation-independent
         elif self.color_names[self.color_mode] == 'distance':
-            self.colors = distance_colors(self.points)
+            self.colors = distance_colors(self.original_points)
         else:
             self.colors = np.ones((self.n_points, 3), dtype=np.float32) * 0.85
         self._colors_dirty = True
@@ -541,6 +568,7 @@ class FPSViewer:
         print(f"    Scroll          - Adjust speed")
         print(f"    1-5             - Speed presets")
         print(f"    +/-             - Point size")
+        print(f"    Q               - Toggle shape (circle/square)")
         print(f"    C               - Cycle color")
         print(f"    R               - Reset position")
         print(f"    P               - Print position")
@@ -659,6 +687,8 @@ class FPSViewer:
             glUseProgram(self._point_shader)
             glUniform1f(glGetUniformLocation(self._point_shader, "u_point_size"),
                         self.point_size)
+            glUniform1i(glGetUniformLocation(self._point_shader, "u_square_mode"),
+                        1 if self.square_points else 0)
             glUniform1f(glGetUniformLocation(self._point_shader, "u_near"),
                         self.near_plane)
             glUniform1f(glGetUniformLocation(self._point_shader, "u_far"),
@@ -1139,8 +1169,10 @@ class FPSViewer:
 
         # Status bar at bottom
         edl_tag = "EDL" if self.edl_enabled else "edl"
+        shape_tag = "Square" if self.square_points else "Circle"
         status = (f"Speed: {self.move_speed:.2f}  |  "
                   f"Pt Size: {self.point_size:.1f}  |  "
+                  f"Shape: {shape_tag}  |  "
                   f"Color: {self.color_names[self.color_mode]}  |  "
                   f"{edl_tag}  |  "
                   f"Points: {self.n_points:,}")
@@ -1244,6 +1276,7 @@ class FPSViewer:
             hline("")
             hline("Display:", 1.0, 0.8, 0.3)
             hline("  +/-           Point Size")
+            hline("  Q             Toggle Shape")
             hline("  C             Cycle Color Mode")
             edl_state = "ON" if self.edl_enabled else "OFF"
             hline(f"  E             Toggle EDL ({edl_state})")
@@ -1537,6 +1570,10 @@ class FPSViewer:
                    f"Yaw: {math.degrees(self.yaw):.1f}  Pitch: {math.degrees(self.pitch):.1f}")
             self._set_toast(msg)
             print(msg)
+        elif key == glfw.KEY_Q:
+            self.square_points = not self.square_points
+            shape = "Square" if self.square_points else "Circle"
+            self._set_toast(f"Point shape: {shape}")
         elif key == glfw.KEY_EQUAL:
             step = 0.1 if self.point_size < 1.0 else 0.5
             self.point_size = min(self.point_size + step, 20.0)
